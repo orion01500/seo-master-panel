@@ -1,3 +1,4 @@
+import random
 import sqlite3
 import pandas as pd
 import plotly.express as px
@@ -5,7 +6,7 @@ import requests
 import streamlit as st
 
 # ==========================================
-# 1. KONFIGURACJA STRONY I MENU
+# 1. KONFIGURACJA STRONY I BAZY DANYCH
 # ==========================================
 st.set_page_config(
     page_title="SEO Master Panel",
@@ -14,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Baza danych w pamięci / pliku SQLite
+# Inicjalizacja lokalnej bazy danych SQLite
 conn = sqlite3.connect("seo_panel.db", check_same_thread=False)
 c = conn.cursor()
 c.execute("""
@@ -28,106 +29,108 @@ CREATE TABLE IF NOT EXISTS position_history (
 """)
 conn.commit()
 
-# --- BOCZNE MENU NAWIGACYJNE ---
+# ==========================================
+# 2. PASEK BOCZNY - MENU NAWIGACYJNE
+# ==========================================
 st.sidebar.title("🔍 SEO Master Panel v2.0")
 st.sidebar.markdown("---")
 menu_choice = st.sidebar.radio(
-    "Nawigacja / Menu:",
+    "MENU NAWIGACJI:",
     [
-        "📊 Dashboard & Trend pozycji",
+        "📊 Dashboard & Monitoring",
         "➕ Masowy monitoring fraz",
         "⚔️ Analiza Konkurencji",
         "🔗 Profil Linków (Backlinki)",
-        "⚙️ Ustawienia i Klucze API",
+        "⚙️ Ustawienia i API",
     ],
 )
 
-# ==========================================
-# 2. MODUŁ: DASHBOARD & MONITORING
-# ==========================================
-if menu_choice == "📊 Dashboard & Trend pozycji":
-    st.title("📊 Monitoring Pozycji i Statystyki Widoczności")
+# Globalne pole wyboru domeny w pasku bocznym
+selected_domain = st.sidebar.text_input(
+    "🌐 Twoja główna domena:", value="mojawitryna.pl"
+)
 
-    col_dom, col_date = st.columns([2, 1])
-    with col_dom:
-        my_domain = st.text_input(
-            "Twoja Domena:", value="mojawitryna.pl", key="dashboard_domain"
-        )
+# ==========================================
+# 3. MODUŁ 1: DASHBOARD & MONITORING
+# ==========================================
+if menu_choice == "📊 Dashboard & Monitoring":
+    st.title("📊 Monitoring Pozycji i Widoczności")
+    st.caption(f"Aktywna domena: **{selected_domain}**")
 
-    st.markdown("### 🎯 Szybkie podsumowanie widoczności")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Średnia pozycja", "12.4", delta="-1.5 (Awanse)")
-    m2.metric("Frazy w Top 3", "14", delta="+2")
-    m3.metric("Frazy w Top 10", "48", delta="+5")
-    m4.metric("Szacowany ruch Google", "12,450 / mc", delta="+850")
+    # Kafelki ze statystykami
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Średnia pozycja", "11.8", delta="-1.2 (Wzrost)")
+    col2.metric("Frazy w Top 3", "16", delta="+3")
+    col3.metric("Frazy w Top 10", "52", delta="+7")
+    col4.metric("Estymowany ruch", "14,200 / mc", delta="+1,150")
 
     st.markdown("---")
-    st.subheader("📈 Historia pozycji fraz kluczowych")
+    st.subheader("📈 Wykres zmian pozycji w czasie")
 
-    # Pobranie danych z bazy
+    # Pobieranie danych z bazy dla wybranej domeny
     df_db = pd.read_sql_query(
-        "SELECT keyword, position, check_date FROM position_history WHERE domain = ?",
+        "SELECT keyword AS 'Fraza', position AS 'Pozycja', check_date AS 'Data' FROM position_history WHERE domain = ?",
         conn,
-        params=(my_domain,),
+        params=(selected_domain,),
     )
 
     if not df_db.empty:
+        # Interaktywny wykres Plotly
         fig = px.line(
             df_db,
-            x="check_date",
-            y="position",
-            color="keyword",
+            x="Data",
+            y="Pozycja",
+            color="Fraza",
             markers=True,
-            title="Wykres zmian pozycji w czasie",
+            title="Historia pozycji w wyszukiwarce Google",
         )
         fig.update_yaxes(
             autorange="reversed"
-        )  # Odwrócenie osi Y, by 1 pozycja była na samej górze
+        )  # Odwrócenie osi Y: Pozycja 1 na samej górze
         st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("📋 Tabela bieżących pozycji")
+        st.subheader("📋 Aktualna tabela pozycji")
         st.dataframe(df_db, use_container_width=True)
     else:
         st.info(
-            "Brak zapisanych pozycji w bazie dla tej domeny. Przejdź do zakładki 'Masowy monitoring fraz', aby dodać pierwsze frazy."
+            "Brak zapisanych pozycji w bazie. Przejdź do zakładki **'Masowy monitoring fraz'**, aby dodać pierwsze słowa kluczowe."
         )
 
 # ==========================================
-# 3. MODUŁ: MASOWE SPRAWDZANIE FRAZ
+# 4. MODUŁ 2: MASOWY MONITORING FRAZ
 # ==========================================
 elif menu_choice == "➕ Masowy monitoring fraz":
     st.title("➕ Masowe Sprawdzanie i Dodawanie Fraz Kluczowych")
     st.write(
-        "Wklej listę fraz kluczowych, aby automatycznie sprawdzić ich pozycje w wyszukiwarce Google."
+        "Wklej dużą listę fraz kluczowych, aby automatycznie zmierzyć ich pozycję w wyszukiwarce."
     )
 
-    domain_input = st.text_input("Domena do sprawdzenia:", value="mojawitryna.pl")
+    domain_input = st.text_input(
+        "Domena do sprawdzania:", value=selected_domain
+    )
     raw_keywords = st.text_area(
-        "Frazy kluczowe (wklej każdą frazę w nowym wierszu):",
+        "Wklej frazy kluczowe (każda w nowej linii):",
         height=200,
-        placeholder="pozycjonowanie stron\naudyt seo\nsklep internetowy",
+        placeholder="pozycjonowanie stron\naudyt seo\nsklep internetowy\nagencja marketingowa",
     )
 
     if st.button("🚀 Uruchom masowe sprawdzanie pozycji"):
         kw_list = [k.strip() for k in raw_keywords.split("\n") if k.strip()]
 
         if kw_list:
-            st.success(
-                f"Rozpoczęto analizę dla {len(kw_list)} fraz kluczowych..."
+            st.info(
+                f"Rozpoczęto analizę pozycji dla {len(kw_list)} fraz..."
             )
             progress_bar = st.progress(0)
 
-            # Algorytm pobierający pozycje
+            # Pętla sprawdzająca pozycje
             for index, kw in enumerate(kw_list):
-                # Tutaj następuje zapytanie do API (DataForSEO / Google SERP)
-                # W ramach podglądu generowana jest przykładowa pozycja z zakresu 1-50
-                import random
-
-                simulated_position = random.randint(1, 35)
+                # Symulacja wyniku SERP (gotowe pod podpięcie zewnętrznego API, np. DataForSEO)
+                simulated_pos = random.randint(1, 40)
 
                 c.execute(
                     "INSERT INTO position_history (domain, keyword, position) VALUES (?, ?, ?)",
-                    (domain_input, kw, simulated_position),
+                    (domain_input, kw, simulated_pos),
                 )
                 conn.commit()
 
@@ -135,28 +138,28 @@ elif menu_choice == "➕ Masowy monitoring fraz":
 
             st.balloons()
             st.success(
-                "Wszystkie pozycje zostały zmierzone i pomyślnie zapisane w bazie danych!"
+                f"Pomyślnie zmierzono i zapisano pozycje dla {len(kw_list)} fraz!"
             )
         else:
-            st.warning("Wprowadź co najmniej jedną frazę kluczową.")
+            st.warning("Proszę wprowadzić przynajmniej jedną frazę kluczową.")
 
 # ==========================================
-# 4. MODUŁ: ANALIZA KONKURENCJI
+# 5. MODUŁ 3: ANALIZA KONKURENCJI
 # ==========================================
 elif menu_choice == "⚔️ Analiza Konkurencji":
-    st.title("⚔️ Analiza Fraz i Widoczności Konkurencji")
+    st.title("⚔️ Sprawdzanie Fraz Kluczowych Konkurencji")
     st.write(
-        "Sprawdź, na jakie frazy kluczowe docierają Twoi konkurenci i na których pozycjach znajdują się w Google."
+        "Wpisz domenę konkurenta, aby zobaczyć, na jakie frazy jest widoczny w Google."
     )
 
     comp_domain = st.text_input(
-        "Podaj domenę konkurenta:", value="konkurent.pl"
+        "Podaj domenę konkurenta:", value="konkurencja.pl"
     )
 
-    if st.button("🔎 Pobierz frazy konkurencji"):
-        st.subheader(f"Wyniki analizy dla: {comp_domain}")
+    if st.button("🔎 Analizuj frazy konkurencji"):
+        st.subheader(f"Wyniki analizy fraz dla domeny: {comp_domain}")
 
-        # Tabela porównawcza fraz konkurencji
+        # Przykładowe zestawienie fraz konkurencji
         mock_comp_data = {
             "Fraza Kluczowa": [
                 "kurs pozycjonowania",
@@ -167,30 +170,36 @@ elif menu_choice == "⚔️ Analiza Konkurencji":
             ],
             "Pozycja Konkurencji": [2, 4, 1, 7, 3],
             "Wyszukiwania / mc": [2900, 1900, 4400, 880, 1300],
-            "Trudność frazy (KD)": ["Średnia (45%)", "Wysoka (72%)", "Wysoka (81%)", "Niska (28%)", "Średnia (51%)"],
+            "Trudność frazy (KD)": [
+                "Średnia (45%)",
+                "Wysoka (72%)",
+                "Wysoka (81%)",
+                "Niska (28%)",
+                "Średnia (51%)",
+            ],
             "Estymowany Ruch": [1150, 420, 2100, 95, 380],
         }
         df_comp = pd.DataFrame(mock_comp_data)
         st.dataframe(df_comp, use_container_width=True)
 
 # ==========================================
-# 5. MODUŁ: BACKLINKI
+# 6. MODUŁ 4: PROFIL LINKÓW (BACKLINKI)
 # ==========================================
 elif menu_choice == "🔗 Profil Linków (Backlinki)":
     st.title("🔗 Analiza Linków Zwrotnych (Backlinks)")
     st.write(
-        "Sprawdź, jakie strony internetowe odsyłają i linkują do badanej domeny."
+        "Sprawdź, z jakich stron internetowych i domeny pozyskują odnośniki (linki zwrotne)."
     )
 
     backlink_domain = st.text_input(
-        "Domena do analizy linków:", value="mojawitryna.pl"
+        "Podaj domenę do analizy linków:", value=selected_domain
     )
 
     if st.button("🔍 Wykryj strony linkujące"):
         st.subheader(f"Profil linków dla: {backlink_domain}")
 
         b_data = {
-            "Strona Odsyłająca (Referring Domain)": [
+            "Strona Odsyłająca (Referring Page)": [
                 "https://portaltechnologiczny.pl/artykuly/seo-2026",
                 "https://katalog-firm-polska.pl/oferta/10293",
                 "https://blog-marketingowy.com/jak-pozycjonowac",
@@ -204,7 +213,7 @@ elif menu_choice == "🔗 Profil Linków (Backlinki)":
             ],
             "Domain Rating (DR)": [68, 34, 52, 29],
             "Atrybut Linku": ["DoFollow", "NoFollow", "DoFollow", "DoFollow"],
-            "Data wykrycia": [
+            "Data Wykrycia": [
                 "2026-09-12",
                 "2026-09-18",
                 "2026-09-22",
@@ -215,25 +224,21 @@ elif menu_choice == "🔗 Profil Linków (Backlinki)":
         st.dataframe(df_b, use_container_width=True)
 
 # ==========================================
-# 6. MODUŁ: USTAWIENIA API
+# 7. MODUŁ 5: USTAWIENIA I KLUCZE API
 # ==========================================
-elif menu_choice == "⚙️ Ustawienia i Klucze API":
-    st.title("⚙️ Konfiguracja Połączeń API")
-    st.markdown(
-        """
-    Aby pobierać prawdziwe dane w czasie rzeczywistym z serwerów Google, połącz panel z wybranym dostawcą API:
-    """
+elif menu_choice == "⚙️ Ustawienia i API":
+    st.title("⚙️ Konfiguracja Kluczy API i Ustawień")
+    st.info(
+        "Podepnij wybrane dostawce danych SEO, aby pobierać rzeczywiste pozycje i linki w czasie rzeczywistym."
     )
 
-    api_provider = st.selectbox(
+    st.selectbox(
         "Dostawca danych SERP & Backlinks:",
         ["DataForSEO API", "Ahrefs API", "Semrush API", "Google Search Console API"],
     )
 
-    api_key = st.text_input(
-        f"Wprowadź Klucz API ({api_provider}):", type="password"
-    )
-    api_secret = st.text_input("Klucz Prywatny / Password (jeśli wymagany):", type="password")
+    st.text_input("Klucz API / API Key:", type="password")
+    st.text_input("Klucz Prywatny / API Secret:", type="password")
 
-    if st.button("💾 Zapisz konfigurację"):
-        st.success("Klucze API zostały pomyślnie zweryfikowane i zapisane!")
+    if st.button("💾 Zapisz ustawienia"):
+        st.success("Zapisano konfigurację kluczy API!")
